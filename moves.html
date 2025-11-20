@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="
+          default-src 'self';
+          script-src 'self';
+          style-src 'self' 'unsafe-inline';
+          img-src 'self' data:;
+          font-src 'self' data:;
+          connect-src 'self';
+          object-src 'none';
+        ">
+  <title>Moves</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #14151b;
+      color: #f5f5f5;
+      padding: 8px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+    }
+    h1 {
+      margin: 0 0 6px 0;
+      font-size: 14px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      opacity: 0.8;
+    }
+    #movesContainer {
+      margin-top: 4px;
+      flex: 1;
+      overflow-y: auto;
+      font-size: 12px;
+      padding-right: 4px;
+    }
+    .move-pair {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 2px 0;
+      margin-bottom: 2px;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      transition: background 0.1s;
+    }
+    .move-pair:hover {
+      background: rgba(255,255,255,0.03);
+    }
+    .move-pair:last-child {
+      font-weight: 600;
+      color: #4caf50;
+    }
+    .move-num {
+      min-width: 20px;
+      opacity: 0.7;
+      font-size: 11px;
+      margin-right: 4px;
+    }
+    .move-white, .move-black {
+      padding: 0 4px;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .move-white {
+      color: #f5f5f5;
+    }
+    .move-black {
+      color: #b0b0b0;
+    }
+    .move-last {
+      background: rgba(76, 175, 80, 0.1) !important;
+      border-radius: 2px;
+      padding: 1px 2px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Moves</h1>
+  <div id="movesContainer"></div>
+
+  <script>
+    const movesContainer = document.getElementById("movesContainer");
+
+    function renderMoves(moves) {
+      movesContainer.innerHTML = "";
+      if (!moves || !moves.length) {
+        movesContainer.innerHTML = '<div style="opacity:0.5; font-style:italic;">No moves yet.</div>';
+        return;
+      }
+
+      let html = '';
+      let whiteNum = 1;
+      for (let i = 0; i < moves.length; i += 2) {
+        const isLastPair = i >= moves.length - 2;
+        const whiteMove = moves[i];
+        html += `<div class="move-pair ${isLastPair ? 'move-last' : ''}">`;
+        html += `<span class="move-num">${whiteNum}.</span>`;
+        html += `<span class="move-white">${whiteMove.from || "?"}-${whiteMove.to || "?"}</span>`;
+
+        if (i + 1 < moves.length) {
+          const blackMove = moves[i + 1];
+          html += ` <span class="move-black">${blackMove.from || "?"}-${blackMove.to || "?"}</span>`;
+        }
+        html += '</div>';
+        whiteNum++;
+      }
+      if (moves.length % 2 === 1) {
+        const last = moves[moves.length - 1];
+        html += `<div class="move-pair move-last">`;
+        html += `<span class="move-num">${whiteNum}.</span>`;
+        html += `<span class="move-white">${last.from || "?"}-${last.to || "?"}</span>`;
+        html += '</div>';
+      }
+      movesContainer.innerHTML = html;
+
+      // auto-scroll to last move
+      movesContainer.scrollTop = movesContainer.scrollHeight;
+    }
+
+    if (window.electronAPI?.onMovesUpdate) {
+      window.electronAPI.onMovesUpdate((moves) => {
+        renderMoves(moves);
+      });
+    } else {
+      movesContainer.innerHTML = '<div style="opacity:0.5;">IPC not connected (electronAPI.onMovesUpdate missing).</div>';
+    }
+  </script>
+</body>
+</html>

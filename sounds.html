@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; object-src 'none';">
+  <title>Sound Settings</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f1419;
+      color: #e8eaed;
+    }
+    h1 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      font-size: 22px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #9aa0a6;
+      margin-bottom: 20px;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+      gap: 8px;
+    }
+    .label {
+      width: 130px;
+      font-size: 14px;
+    }
+    input[type="text"] {
+      flex: 1;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.05);
+      color: #e8eaed;
+      font-size: 12px;
+    }
+    button {
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .btn-browse {
+      background: #4a9eff;
+      color: white;
+    }
+    .btn-primary {
+      background: #4caf50;
+      color: white;
+      margin-right: 8px;
+    }
+    .btn-secondary {
+      background: #37474f;
+      color: #e0e0e0;
+    }
+    .actions {
+      margin-top: 18px;
+      text-align: right;
+    }
+    .hint {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #9aa0a6;
+    }
+  </style>
+</head>
+<body>
+  <h1>Sound Settings</h1>
+  <div class="subtitle">
+    Choose custom sounds for moves, captures, checks, and promotions.
+  </div>
+
+  <div id="rowsContainer"></div>
+
+  <div class="actions">
+    <button class="btn-primary" id="saveBtn">Save</button>
+    <button class="btn-secondary" id="resetBtn">Reset to Defaults</button>
+    <div class="hint">Changes are saved per device and used in future games.</div>
+  </div>
+
+  <script>
+    const soundTypes = [
+      { key: "move",    label: "Normal Move", defaultPath: "assets/sounds/move-self.mp3" },
+      { key: "capture", label: "Capture",     defaultPath: "assets/sounds/capture.mp3" },
+      { key: "check",   label: "Check / Mate",defaultPath: "assets/sounds/move-check.mp3" },
+      { key: "promote", label: "Promotion",   defaultPath: "assets/sounds/promote.mp3" }
+    ];
+
+    const rowsContainer = document.getElementById("rowsContainer");
+    const inputs = {};
+    let config = {};
+
+    function buildUI() {
+      rowsContainer.innerHTML = "";
+      soundTypes.forEach(st => {
+        const row = document.createElement("div");
+        row.className = "row";
+
+        const label = document.createElement("div");
+        label.className = "label";
+        label.textContent = st.label;
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.readOnly = true;
+        input.id = `sound-${st.key}`;
+
+        const btn = document.createElement("button");
+        btn.textContent = "Browse…";
+        btn.className = "btn-browse";
+
+        btn.addEventListener("click", async () => {
+          const path = await window.electronAPI?.browseSoundFile();
+          if (path) {
+            input.value = path;
+            config[st.key] = path;
+          }
+        });
+
+        row.appendChild(label);
+        row.appendChild(input);
+        row.appendChild(btn);
+
+        rowsContainer.appendChild(row);
+        inputs[st.key] = input;
+      });
+    }
+
+    async function loadConfig() {
+      const stored = (await window.electronAPI?.soundsGetAll()) || {};
+      config = { ...stored };
+
+      soundTypes.forEach(st => {
+        const val = config[st.key] || st.defaultPath;
+        inputs[st.key].value = val;
+      });
+    }
+
+    document.getElementById("saveBtn").addEventListener("click", async () => {
+      // Ensure keys that weren't changed still exist
+      soundTypes.forEach(st => {
+        if (!config[st.key]) {
+          config[st.key] = inputs[st.key].value || st.defaultPath;
+        }
+      });
+      await window.electronAPI?.soundsSaveAll(config);
+      window.close(); // optional: close when saved
+    });
+
+    document.getElementById("resetBtn").addEventListener("click", async () => {
+      config = {};
+      soundTypes.forEach(st => {
+        inputs[st.key].value = st.defaultPath;
+      });
+      await window.electronAPI?.soundsSaveAll({});
+    });
+
+    buildUI();
+    loadConfig();
+  </script>
+</body>
+</html>

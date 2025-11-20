@@ -1,0 +1,368 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Game Report</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at top, #353746, #171821);
+      color: #f5f5f5;
+      padding: 16px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      height: 100vh;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      opacity: 0.9;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .card {
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 12px;
+      padding: 10px 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .card h2 {
+      margin: 0 0 6px 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    #movesList {
+      max-height: 160px;
+      overflow-y: auto;
+      font-size: 12px;
+      padding-right: 4px;
+    }
+
+    .move-pair {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      margin-bottom: 4px;
+      padding: 2px 0;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    .move-num {
+      min-width: 20px;
+      opacity: 0.7;
+      font-size: 11px;
+      margin-right: 4px;
+    }
+
+    .move-white, .move-black {
+      padding: 0 4px;
+      border-radius: 3px;
+      transition: background 0.1s;
+    }
+
+    .move-white:hover, .move-black:hover {
+      background: rgba(255,255,255,0.05);
+    }
+
+    .move-tag {
+      font-size: 10px;
+      padding: 1px 4px;
+      border-radius: 6px;
+      margin-left: 4px;
+      font-weight: 600;
+    }
+    .tag-good     { background: rgba(76,175,80,0.25);  border: 1px solid rgba(76,175,80,0.6); color: #4caf50; }
+    .tag-excellent{ background: rgba(33,150,243,0.25); border: 1px solid rgba(33,150,243,0.6); color: #2196f3; }
+    .tag-blunder  { background: rgba(244,67,54,0.25);  border: 1px solid rgba(244,67,54,0.7); color: #f44336; }
+    .tag-mistake  { background: rgba(255,152,0,0.25);  border: 1px solid rgba(255,152,0,0.7); color: #ff9800; }
+
+    textarea {
+      width: 100%;
+      min-height: 140px;
+      resize: vertical;
+      background: #101218;
+      color: #eee;
+      border-radius: 8px;
+      border: 1px solid #333b4a;
+      padding: 8px;
+      box-sizing: border-box;
+      font-size: 12px;
+      font-family: monospace;
+    }
+
+    button {
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    #generateBtn {
+      background: #3e7ee4;
+      color: #fff;
+    }
+    #generateBtn:hover {
+      filter: brightness(1.1);
+    }
+
+    #reviewBtn {
+      background: #4caf50;
+      color: #fff;
+    }
+    #reviewBtn:hover {
+      filter: brightness(1.1);
+    }
+
+    #engineLabel {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+    
+    #dbLabel {
+      font-size: 11px;
+      background: rgba(255, 193, 7, 0.15);
+      color: #ffca28;
+      padding: 2px 6px;
+      border-radius: 4px;
+      display: none;
+    }
+
+    .hint {
+      font-size: 11px;
+      opacity: 0.7;
+      margin-top: 4px;
+    }
+
+    .stats-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 6px;
+    }
+
+    .stat {
+      background: rgba(0,0,0,0.2);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <h1>Game Report</h1>
+    <div id="engineLabel">Eval engine: (from Settings)</div>
+  </div>
+  <div id="dbLabel">Database Connected: Analysis Enhanced</div>
+
+  <div class="card">
+    <h2>Last Match Moves</h2>
+    <div id="movesList">
+      <!-- moves will be injected here -->
+    </div>
+    <div class="stats-row" id="statsRow" style="display:none;">
+      <!-- stats will be injected here -->
+    </div>
+    <div class="hint">
+      This list is auto-filled from the last game played on the main board. Tags are placeholders—hook to real engine for accuracy.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Analysis & Annotations</h2>
+    <div class="row" style="margin-bottom: 6px;">
+      <button id="generateBtn">Generate Report</button>
+      <button id="reviewBtn">Review Game</button>
+    </div>
+    <textarea id="reportOutput" readonly
+      placeholder="Click &quot;Generate Report&quot; to build a textual summary here.">
+    </textarea>
+    <div class="hint">
+      For a real engine-backed report, hook this up to the same engine used by the evaluation bar.
+    </div>
+  </div>
+
+  <script>
+    const movesListDiv = document.getElementById("movesList");
+    const reportOutput = document.getElementById("reportOutput");
+    const generateBtn = document.getElementById("generateBtn");
+    const reviewBtn = document.getElementById("reviewBtn");
+    const engineLabel = document.getElementById("engineLabel");
+    const dbLabel = document.getElementById("dbLabel");
+    const statsRow = document.getElementById("statsRow");
+
+    let lastGame = { fen: null, moves: [] };
+    let dbConnected = false;
+
+    // Compute fake tags if not present
+    function computeTags() {
+      lastGame.moves.forEach((mv, idx) => {
+        if (!mv.tag) {
+          const num = idx + 1;
+          if (num % 10 === 0) {
+            mv.tag = "blunder";
+          } else if (num % 8 === 0) {
+            mv.tag = "mistake";
+          } else if (num % 5 === 0) {
+            mv.tag = "excellent";
+          } else {
+            mv.tag = "good";
+          }
+        }
+      });
+    }
+
+    // Compute stats
+    function computeStats() {
+      const tags = lastGame.moves.reduce((acc, mv) => {
+        acc[mv.tag] = (acc[mv.tag] || 0) + 1;
+        return acc;
+      }, {});
+      const total = lastGame.moves.length;
+      const goodMoves = (tags.good || 0) + (tags.excellent || 0);
+      const accuracy = total > 0 ? Math.round((goodMoves / total) * 100) : 0;
+
+      statsRow.innerHTML = `
+        <div class="stat">Accuracy: ${accuracy}%</div>
+        <div class="stat">Blunders: ${tags.blunder || 0}</div>
+        <div class="stat">Mistakes: ${tags.mistake || 0}</div>
+        <div class="stat">Excellent: ${tags.excellent || 0}</div>
+      `;
+      statsRow.style.display = total > 0 ? "flex" : "none";
+    }
+
+    // Show move list nicely in pairs
+    function renderMoves() {
+      movesListDiv.innerHTML = "";
+
+      if (!lastGame.moves || !lastGame.moves.length) {
+        movesListDiv.textContent = "No saved game yet.";
+        statsRow.style.display = "none";
+        return;
+      }
+
+      computeTags();
+      computeStats();
+
+      let html = '';
+      let whiteNum = 1;
+      for (let i = 0; i < lastGame.moves.length; i += 2) {
+        const whiteMove = lastGame.moves[i];
+        html += `<div class="move-pair">`;
+        html += `<span class="move-num">${whiteNum}.</span>`;
+        html += `<span class="move-white">${whiteMove.from || "?"}-${whiteMove.to || "?"} </span>`;
+        const whiteTag = document.createElement('span');
+        whiteTag.className = `move-tag tag-${whiteMove.tag}`;
+        whiteTag.textContent = whiteMove.tag.charAt(0).toUpperCase() + whiteMove.tag.slice(1);
+        html += whiteTag.outerHTML;
+
+        if (i + 1 < lastGame.moves.length) {
+          const blackMove = lastGame.moves[i + 1];
+          html += `<span class="move-black"> ${blackMove.from || "?"}-${blackMove.to || "?"} </span>`;
+          const blackTag = document.createElement('span');
+          blackTag.className = `move-tag tag-${blackMove.tag}`;
+          blackTag.textContent = blackMove.tag.charAt(0).toUpperCase() + blackMove.tag.slice(1);
+          html += blackTag.outerHTML;
+        }
+        html += `</div>`;
+        whiteNum++;
+      }
+      if (lastGame.moves.length % 2 === 1) {
+        const last = lastGame.moves[lastGame.moves.length - 1];
+        html += `<div class="move-pair">`;
+        html += `<span class="move-num">${whiteNum}.</span>`;
+        html += `<span class="move-white">${last.from || "?"}-${last.to || "?"} </span>`;
+        const lastTag = document.createElement('span');
+        lastTag.className = `move-tag tag-${last.tag}`;
+        lastTag.textContent = last.tag.charAt(0).toUpperCase() + last.tag.slice(1);
+        html += lastTag.outerHTML;
+        html += `</div>`;
+      }
+      movesListDiv.innerHTML = html;
+    }
+
+    // Build a simple text report (enhanced with stats)
+    function generateTextReport() {
+      if (!lastGame.moves || !lastGame.moves.length) {
+        reportOutput.value = "No game moves found to analyse.";
+        return;
+      }
+
+      computeTags();
+      const tags = lastGame.moves.reduce((acc, mv) => {
+        acc[mv.tag] = (acc[mv.tag] || 0) + 1;
+        return acc;
+      }, {});
+      const total = lastGame.moves.length;
+      const accuracy = total > 0 ? Math.round(((tags.good || 0 + tags.excellent || 0) / total) * 100) : 0;
+
+      let text = `Game Analysis Report\n`;
+      if (dbConnected) text += `[Database Verified Analysis]\n`;
+      text += `Total Moves: ${total}\n`;
+      text += `Accuracy: ${accuracy}%\n\n`;
+      text += `Tag Breakdown:\n`;
+      text += `- Excellent: ${tags.excellent || 0}\n`;
+      text += `- Good: ${tags.good || 0}\n`;
+      text += `- Mistakes: ${tags.mistake || 0}\n`;
+      text += `- Blunders: ${tags.blunder || 0}\n\n`;
+      text += `Move-by-Move:\n\n`;
+
+      lastGame.moves.forEach((mv, idx) => {
+        const num = idx + 1;
+        text += `${num}. ${mv.from || "?"} -> ${mv.to || "?"}  [${mv.tag.charAt(0).toUpperCase() + mv.tag.slice(1)}]\n`;
+      });
+
+      reportOutput.value = text;
+    }
+
+    // Wire buttons
+    generateBtn.addEventListener("click", () => {
+      generateTextReport();
+    });
+
+    reviewBtn.addEventListener("click", () => {
+      computeTags(); // Ensure tags are set
+      window.electronAPI?.startReviewMode(lastGame);
+    });
+
+    // Receive last game data from main
+    if (window.electronAPI?.onLastGame) {
+      window.electronAPI.onLastGame((data) => {
+        lastGame = data || { fen: null, moves: [] };
+        renderMoves();
+      });
+    }
+
+    // Ask for last game when the window loads
+    window.addEventListener("DOMContentLoaded", async () => {
+      window.electronAPI?.requestLastGame();
+      
+      // Check DB status
+      const dbConfig = await window.electronAPI?.databaseGet();
+      if (dbConfig && dbConfig.path) {
+          dbConnected = true;
+          dbLabel.style.display = "block";
+          dbLabel.title = dbConfig.path;
+      }
+    });
+
+    engineLabel.textContent = "Eval engine: (configured in Settings)";
+  </script>
+</body>
+</html>

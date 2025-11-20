@@ -1,0 +1,350 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Engines</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at top, #343645, #161822);
+      color: #f5f5f5;
+      padding: 14px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: 100vh;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      opacity: 0.9;
+    }
+
+    .top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    button {
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    #addEngineBtn {
+      background: #3e7ee4;
+      color: #fff;
+    }
+    #deleteEngineBtn {
+      background: #f44336;
+      color: #fff;
+    }
+    button:hover {
+      filter: brightness(1.1);
+    }
+
+    .card {
+      background: rgba(0,0,0,0.35);
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      border: 1px solid rgba(255,255,255,0.06);
+      padding: 10px 12px;
+    }
+
+    .list {
+      max-height: 140px;
+      overflow-y: auto;
+      margin-top: 4px;
+    }
+
+    .engine-row {
+      padding: 4px 6px;
+      border-radius: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      cursor: pointer;
+      margin-bottom: 2px;
+    }
+    .engine-row:hover {
+      background: rgba(255,255,255,0.06);
+    }
+    .engine-row.selected {
+      background: rgba(62,126,228,0.25);
+      border: 1px solid rgba(62,126,228,0.8);
+    }
+
+    .badge {
+      font-size: 10px;
+      padding: 1px 4px;
+      border-radius: 6px;
+      margin-left: 4px;
+    }
+    .badge-play { background: rgba(76,175,80,0.25); border: 1px solid rgba(76,175,80,0.7); }
+    .badge-eval { background: rgba(33,150,243,0.25); border: 1px solid rgba(33,150,243,0.7); }
+
+    label {
+      font-size: 12px;
+      display: block;
+      margin-top: 6px;
+      color: #bbb;
+    }
+
+    input[type="text"], input[type="number"] {
+      width: 100%;
+      background: #101218;
+      color: #eee;
+      border-radius: 6px;
+      border: 1px solid #333b4a;
+      padding: 4px 6px;
+      box-sizing: border-box;
+      font-size: 13px;
+      margin-top: 2px;
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    
+    .flex-row {
+      display: flex;
+      gap: 12px;
+    }
+    
+    .flex-item {
+      flex: 1;
+    }
+    
+    .browse-group {
+        display: flex;
+        gap: 6px;
+    }
+
+    .hint {
+      font-size: 11px;
+      opacity: 0.7;
+      margin-top: 4px;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="top-row">
+    <h1>Engines</h1>
+    <div>
+      <button id="addEngineBtn">Add Engine</button>
+      <button id="deleteEngineBtn">Delete</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin:0 0 4px 0; font-size:14px;">Installed Engines</h2>
+    <div id="enginesList" class="list"></div>
+  </div>
+
+  <div class="card" id="editorCard" style="display:none;">
+    <h2 style="margin:0 0 4px 0; font-size:14px;">Configuration</h2>
+    <label>
+      Name
+      <input type="text" id="engineNameInput">
+    </label>
+    
+    <div class="flex-row">
+        <div class="flex-item">
+            <label>ELO Rating <span style="opacity:0.5; font-size:10px;">(Simulated)</span>
+            <input type="number" id="engineEloInput" placeholder="Max">
+            </label>
+        </div>
+        <div class="flex-item">
+            <label>Depth Limit
+            <input type="number" id="engineDepthInput" placeholder="Auto">
+            </label>
+        </div>
+    </div>
+    
+    <label>Avatar Image</label>
+    <div class="browse-group">
+        <input type="text" id="engineAvatarInput" readonly placeholder="No image selected">
+        <button id="browseAvatarBtn">Browse</button>
+    </div>
+    
+    <label>Executable Path</label>
+    <input type="text" id="enginePathInput" readonly style="opacity:0.7;">
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="defaultPlayChk">
+      <label for="defaultPlayChk" style="margin:0;">Use as default play engine</label>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="defaultEvalChk">
+      <label for="defaultEvalChk" style="margin:0;">Use as default eval engine</label>
+    </div>
+
+    <div style="margin-top:12px;">
+      <button id="saveEngineBtn">Save Changes</button>
+    </div>
+  </div>
+
+  <script>
+    const addEngineBtn = document.getElementById("addEngineBtn");
+    const deleteEngineBtn = document.getElementById("deleteEngineBtn");
+    const enginesListDiv = document.getElementById("enginesList");
+
+    const editorCard = document.getElementById("editorCard");
+    const engineNameInput = document.getElementById("engineNameInput");
+    const engineEloInput = document.getElementById("engineEloInput");
+    const engineDepthInput = document.getElementById("engineDepthInput");
+    const engineAvatarInput = document.getElementById("engineAvatarInput");
+    const enginePathInput = document.getElementById("enginePathInput");
+    const browseAvatarBtn = document.getElementById("browseAvatarBtn");
+    
+    const defaultPlayChk = document.getElementById("defaultPlayChk");
+    const defaultEvalChk = document.getElementById("defaultEvalChk");
+    const saveEngineBtn = document.getElementById("saveEngineBtn");
+
+    let engines = [];
+    let selectedEngineId = null;
+    let editingEngine = null;
+
+    function loadEngines() {
+      window.electronAPI?.enginesGetAll().then(list => {
+        engines = list || [];
+        renderEngineList();
+      });
+    }
+
+    function renderEngineList() {
+      enginesListDiv.innerHTML = "";
+      if (!engines.length) {
+        enginesListDiv.textContent = "No engines added yet.";
+        editorCard.style.display = "none";
+        selectedEngineId = null;
+        return;
+      }
+
+      engines.forEach(e => {
+        const row = document.createElement("div");
+        row.className = "engine-row" + (e.id === selectedEngineId ? " selected" : "");
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = e.name || "(no name)";
+        row.appendChild(nameSpan);
+
+        const badges = document.createElement("span");
+        if (e.elo) {
+            const b = document.createElement("span");
+            b.className = "badge";
+            b.style.background = "rgba(255,255,255,0.1)";
+            b.textContent = e.elo;
+            badges.appendChild(b);
+        }
+        if (e.isDefaultPlay) {
+          const b = document.createElement("span");
+          b.className = "badge badge-play";
+          b.textContent = "Play";
+          badges.appendChild(b);
+        }
+        if (e.isDefaultEval) {
+          const b = document.createElement("span");
+          b.className = "badge badge-eval";
+          b.textContent = "Eval";
+          badges.appendChild(b);
+        }
+        row.appendChild(badges);
+
+        row.addEventListener("click", () => {
+          selectedEngineId = e.id;
+          editingEngine = { ...e };
+          showEditor(editingEngine);
+          renderEngineList();
+        });
+
+        enginesListDiv.appendChild(row);
+      });
+    }
+
+    function showEditor(engine) {
+      if (!engine) {
+        editorCard.style.display = "none";
+        return;
+      }
+      editorCard.style.display = "block";
+      engineNameInput.value = engine.name || "";
+      enginePathInput.value = engine.path || "";
+      engineEloInput.value = engine.elo || "";
+      engineDepthInput.value = engine.depth || "";
+      engineAvatarInput.value = engine.avatar || "";
+      
+      defaultPlayChk.checked = !!engine.isDefaultPlay;
+      defaultEvalChk.checked = !!engine.isDefaultEval;
+    }
+
+    addEngineBtn.addEventListener("click", async () => {
+      const path = await window.electronAPI?.browseEngineFile();
+      if (!path) return;
+
+      const base = path.split(/[\\/]/).pop();
+      editingEngine = {
+        id: null,
+        name: base,
+        path,
+        elo: 2500,
+        depth: 10,
+        avatar: "",
+        isDefaultPlay: false,
+        isDefaultEval: !engines.length // first engine becomes default eval
+      };
+      selectedEngineId = null;
+      showEditor(editingEngine);
+    });
+
+    browseAvatarBtn.addEventListener("click", async () => {
+        const path = await window.electronAPI?.browseImageFile();
+        if (path) {
+            engineAvatarInput.value = path;
+        }
+    });
+
+    deleteEngineBtn.addEventListener("click", async () => {
+      if (!selectedEngineId) return;
+      engines = await window.electronAPI?.enginesDelete(selectedEngineId);
+      selectedEngineId = null;
+      editingEngine = null;
+      editorCard.style.display = "none";
+      renderEngineList();
+    });
+
+    saveEngineBtn.addEventListener("click", async () => {
+      if (!editingEngine) return;
+      editingEngine.name = engineNameInput.value.trim() || "Engine";
+      editingEngine.path = enginePathInput.value;
+      editingEngine.elo = parseInt(engineEloInput.value) || 0;
+      editingEngine.depth = parseInt(engineDepthInput.value) || 10;
+      editingEngine.avatar = engineAvatarInput.value;
+      
+      editingEngine.isDefaultPlay = defaultPlayChk.checked;
+      editingEngine.isDefaultEval = defaultEvalChk.checked;
+
+      engines = await window.electronAPI?.enginesSave(editingEngine);
+      selectedEngineId = editingEngine.id;
+      renderEngineList();
+    });
+
+    // initial
+    loadEngines();
+  </script>
+</body>
+</html>

@@ -1,0 +1,406 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; object-src 'none';">
+  <title>Game Review</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Ensure board container is relative for svg overlay */
+    #board-container {
+        position: relative;
+    }
+    .arrow-layer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 20;
+    }
+    /* Reuse threat layout styles */
+    .review-controls {
+        margin-top: 20px;
+        display: flex;
+        gap: 12px;
+        width: 100%;
+        justify-content: center;
+    }
+    .legend {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        margin-top: 8px;
+        font-size: 11px;
+        opacity: 0.8;
+    }
+    .legend-item { display: flex; align-items: center; gap: 4px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; }
+  </style>
+</head>
+<body>
+  
+  <div class="threat-layout">
+    <!-- LEFT PANE: BOARD + CONTROLS -->
+    <div class="threat-left-pane">
+      <div id="board-container" style="margin: 0; width: 500px; height: 500px;">
+        <div id="board"></div>
+        <svg class="arrow-layer" id="arrow-layer"></svg>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item"><div class="dot" style="background:#f44336;"></div> Best</div>
+        <div class="legend-item"><div class="dot" style="background:#4caf50;"></div> 2nd</div>
+        <div class="legend-item"><div class="dot" style="background:#2196f3;"></div> 3rd</div>
+        <div class="legend-item"><div class="dot" style="background:#ffc107;"></div> Played</div>
+      </div>
+
+      <div class="review-controls">
+        <button class="control-btn btn-prev" id="startBtn">|&lt;</button>
+        <button class="control-btn btn-prev" id="prevBtn">&lt; Prev</button>
+        <button class="control-btn btn-next" id="nextBtn">Next &gt;</button>
+        <button class="control-btn btn-next" id="endBtn">&gt;|</button>
+      </div>
+      <div id="status-text" style="margin-top:15px; color:#e0e0e0; font-size:15px; text-align:center; font-weight:600;"></div>
+    </div>
+
+    <!-- RIGHT PANE: MOVES LIST -->
+    <div class="threat-right-pane">
+      <div class="threat-menu-header">
+        <h3 style="margin:0; font-size:16px;">Game Moves</h3>
+      </div>
+      <div class="threat-menu-list" id="moves-list">
+        <!-- Items injected via JS -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- State ---
+    let gameData = null;
+    let currentMoveIndex = -1; // -1 = start position
+    let currentPlayedMove = null; // store currently displayed move for overlay
+    
+    // --- DOM Elements ---
+    const boardEl = document.getElementById("board");
+    const arrowLayer = document.getElementById("arrow-layer");
+    const movesListEl = document.getElementById("moves-list");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const startBtn = document.getElementById("startBtn");
+    const endBtn = document.getElementById("endBtn");
+    const statusText = document.getElementById("status-text");
+
+    // --- Board Logic ---
+    const initialBoard = [
+      ["bR","bN","bB","bQ","bK","bB","bN","bR"],
+      ["bP","bP","bP","bP","bP","bP","bP","bP"],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["wP","wP","wP","wP","wP","wP","wP","wP"],
+      ["wR","wN","wB","wQ","wK","wB","wN","wR"]
+    ];
+
+    function cloneBoard(b) { return b.map(row => row.slice()); }
+    function coord(sq) {
+      const col = sq.charCodeAt(0) - 97;
+      const row = 8 - parseInt(sq[1]);
+      return {row, col};
+    }
+    
+    // Helper to convert board array to FEN for engine
+    function boardToFen(b, turnColor) {
+      let rows = [];
+      for (let r = 0; r < 8; r++) {
+        let empty = 0;
+        let rowStr = "";
+        for (let c = 0; c < 8; c++) {
+          const piece = b[r][c];
+          if (!piece) {
+            empty++;
+          } else {
+            if (empty > 0) { rowStr += empty.toString(); empty = 0; }
+            const type = piece[1];
+            const color = piece[0];
+            let ch = type === 'N' ? 'n' : type.toLowerCase();
+            if(color === 'w') ch = ch.toUpperCase();
+            rowStr += ch;
+          }
+        }
+        if (empty > 0) rowStr += empty.toString();
+        rows.push(rowStr);
+      }
+      // Basic assumptions for review arrows
+      return `${rows.join("/")} ${turnColor} KQkq - 0 1`; 
+    }
+
+    function getBoardAtMove(index) {
+      let b = cloneBoard(initialBoard);
+      if (!gameData || !gameData.moves) return b;
+
+      const limit = index === -1 ? -1 : index;
+      
+      for (let i = 0; i <= limit; i++) {
+        const mv = gameData.moves[i];
+        if (!mv) break;
+        const from = coord(mv.from);
+        const to = coord(mv.to);
+        
+        const p = b[from.row][from.col];
+        
+        b[from.row][from.col] = "";
+        b[to.row][to.col] = p;
+
+        if (p && p[1] === 'P' && (to.row === 0 || to.row === 7)) {
+           const color = p[0];
+           if (mv.piece && mv.piece[1] !== 'P') {
+              b[to.row][to.col] = mv.piece;
+           } else {
+              b[to.row][to.col] = color + "Q";
+           }
+        }
+        
+        if (p && p[1] === 'K' && Math.abs(from.col - to.col) > 1) {
+            if (to.col === 6) { // Kingside
+                b[to.row][5] = b[to.row][7]; b[to.row][7] = "";
+            } else if (to.col === 2) { // Queenside
+                b[to.row][3] = b[to.row][0]; b[to.row][0] = "";
+            }
+        }
+      }
+      return b;
+    }
+
+    function renderBoard(boardState, lastMove) {
+      boardEl.innerHTML = "";
+      for(let r=0; r<8; r++){
+        for(let c=0; c<8; c++){
+          const div = document.createElement("div");
+          div.className = "square " + ((r+c)%2===0 ? "light" : "dark");
+          
+          // Highlight and Sticker Logic
+          if(lastMove) {
+            const f = coord(lastMove.from);
+            const t = coord(lastMove.to);
+            
+            if((f.row===r && f.col===c) || (t.row===r && t.col===c)) {
+              div.classList.add("last-move-square");
+            }
+            
+            if (t.row === r && t.col === c && lastMove.tag) {
+               const icon = document.createElement("div");
+               icon.className = `annotation-icon annotation-${lastMove.tag}`;
+               
+               let symbol = "";
+               switch(lastMove.tag) {
+                   case "good": symbol = "!"; break;
+                   case "excellent": symbol = "!!"; break;
+                   case "mistake": symbol = "?"; break;
+                   case "blunder": symbol = "??"; break;
+               }
+               icon.textContent = symbol;
+               div.appendChild(icon);
+            }
+          }
+
+          const p = boardState[r][c];
+          if(p) {
+            const pDiv = document.createElement("div");
+            pDiv.className = "piece";
+            pDiv.style.backgroundImage = `url(assets/pieces/${p}.png)`;
+            div.appendChild(pDiv);
+          }
+          boardEl.appendChild(div);
+        }
+      }
+    }
+    
+    // --- Arrow Logic ---
+    function clearArrows() {
+      arrowLayer.innerHTML = "";
+    }
+
+    function drawArrow(fromSq, toSq, color, opacity = "0.8") {
+      const f = coord(fromSq);
+      const t = coord(toSq);
+      
+      const x1 = (f.col * 12.5) + 6.25;
+      const y1 = (f.row * 12.5) + 6.25;
+      const x2 = (t.col * 12.5) + 6.25;
+      const y2 = (t.row * 12.5) + 6.25;
+
+      const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+      const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+      const id = `arrowhead-${color.replace('#','')}-${Math.random()}`;
+      marker.setAttribute("id", id);
+      marker.setAttribute("markerWidth", "10");
+      marker.setAttribute("markerHeight", "7");
+      marker.setAttribute("refX", "9"); 
+      marker.setAttribute("refY", "3.5");
+      marker.setAttribute("orient", "auto");
+      
+      const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+      poly.setAttribute("points", "0 0, 10 3.5, 0 7");
+      poly.setAttribute("fill", color);
+      marker.appendChild(poly);
+      defs.appendChild(marker);
+      arrowLayer.appendChild(defs);
+
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", x1 + "%");
+      line.setAttribute("y1", y1 + "%");
+      line.setAttribute("x2", x2 + "%");
+      line.setAttribute("y2", y2 + "%");
+      line.setAttribute("stroke", color);
+      line.setAttribute("stroke-width", "3");
+      line.setAttribute("stroke-linecap", "round");
+      line.setAttribute("marker-end", `url(#${id})`);
+      line.style.opacity = opacity;
+      
+      arrowLayer.appendChild(line);
+    }
+
+    function updateUI() {
+      const total = gameData?.moves?.length || 0;
+      
+      prevBtn.disabled = currentMoveIndex < 0;
+      startBtn.disabled = currentMoveIndex < 0;
+      nextBtn.disabled = currentMoveIndex >= total - 1;
+      endBtn.disabled = currentMoveIndex >= total - 1;
+      
+      let mv = null;
+      if (currentMoveIndex === -1) {
+        statusText.textContent = "Start Position";
+      } else {
+        mv = gameData.moves[currentMoveIndex];
+        const num = Math.floor(currentMoveIndex/2) + 1;
+        const color = currentMoveIndex%2===0 ? "White" : "Black";
+        statusText.textContent = `${num}. ${color} ${mv.from}-${mv.to} ${mv.tag ? '[' + mv.tag.toUpperCase() + ']' : ''}`;
+      }
+      currentPlayedMove = mv;
+
+      const b = getBoardAtMove(currentMoveIndex);
+      renderBoard(b, mv);
+
+      document.querySelectorAll('.threat-item').forEach((el, i) => {
+        el.classList.toggle('active', i === currentMoveIndex);
+        if(i === currentMoveIndex) el.scrollIntoView({block: "nearest", behavior: "smooth"});
+      });
+      
+      clearArrows();
+      
+      // Check for blunders/mistakes to trigger analysis arrows
+      if (mv && (mv.tag === 'blunder' || mv.tag === 'mistake')) {
+          // Show arrow for Played Move (Yellow)
+          drawArrow(mv.from, mv.to, "#ffc107", "0.6");
+
+          // Analyze position BEFORE this move
+          const prevIndex = currentMoveIndex - 1;
+          const prevBoard = getBoardAtMove(prevIndex);
+          const turnColor = (currentMoveIndex % 2 === 0) ? 'w' : 'b';
+          const fen = boardToFen(prevBoard, turnColor);
+          
+          statusText.textContent += " (Analyzing...)";
+          window.electronAPI.requestAnalysis(fen);
+      }
+    }
+
+    function renderList() {
+      movesListEl.innerHTML = "";
+      if(!gameData || !gameData.moves) return;
+
+      gameData.moves.forEach((mv, i) => {
+        const div = document.createElement("div");
+        div.className = "threat-item"; // reuse style
+        
+        const num = Math.floor(i/2) + 1;
+        const dot = i%2===0 ? "." : "...";
+        const color = i%2===0 ? "White" : "Black";
+        
+        let badge = "";
+        if (mv.tag) {
+            let colorStyle = "";
+            if(mv.tag === 'blunder') colorStyle = "color:#f44336;";
+            else if(mv.tag === 'mistake') colorStyle = "color:#ff9800;";
+            else if(mv.tag === 'excellent') colorStyle = "color:#2196f3;";
+            else if(mv.tag === 'good') colorStyle = "color:#4caf50;";
+            
+            badge = `<span style="font-weight:bold; margin-left:6px; ${colorStyle}">${mv.tag === 'excellent' ? '!!' : mv.tag === 'blunder' ? '??' : mv.tag === 'mistake' ? '?' : '!'}</span>`;
+        }
+
+        div.innerHTML = `
+          <span style="font-family:monospace; font-size:13px;">${num}${dot}</span>
+          <span style="font-weight:600;">${mv.from}-${mv.to}</span>
+          ${badge}
+          <span style="font-size:11px; opacity:0.6; margin-left:auto;">${color}</span>
+        `;
+        div.onclick = () => {
+          currentMoveIndex = i;
+          updateUI();
+        };
+        movesListEl.appendChild(div);
+      });
+    }
+
+    prevBtn.onclick = () => { if(currentMoveIndex >= -1) currentMoveIndex--; updateUI(); }
+    nextBtn.onclick = () => { if(currentMoveIndex < (gameData?.moves?.length||0)-1) currentMoveIndex++; updateUI(); }
+    startBtn.onclick = () => { currentMoveIndex = -1; updateUI(); }
+    endBtn.onclick = () => { currentMoveIndex = (gameData?.moves?.length||0)-1; updateUI(); }
+
+    window.electronAPI.onReviewGame((data) => {
+      gameData = data;
+      renderList();
+      currentMoveIndex = -1; 
+      updateUI();
+    });
+    
+    window.electronAPI.onAnalysisResult((results) => {
+        // Keep the played move arrow if it exists
+        clearArrows();
+        if (currentPlayedMove) {
+             drawArrow(currentPlayedMove.from, currentPlayedMove.to, "#ffc107", "0.6");
+        }
+
+        if (!results || Object.keys(results).length === 0) {
+             const txt = statusText.textContent.replace(" (Analyzing...)", "");
+             statusText.textContent = txt;
+             return;
+        }
+
+        const txt = statusText.textContent.replace(" (Analyzing...)", "");
+        statusText.textContent = txt;
+        
+        // Red = Best, Green = 2nd, Blue = 3rd
+        if (results[1]) {
+            const m = results[1];
+            drawArrow(m.substring(0,2), m.substring(2,4), "#f44336"); 
+        }
+        if (results[2]) {
+            const m = results[2];
+            drawArrow(m.substring(0,2), m.substring(2,4), "#4caf50"); 
+        }
+        if (results[3]) {
+            const m = results[3];
+            drawArrow(m.substring(0,2), m.substring(2,4), "#2196f3"); 
+        }
+    });
+    
+    // Theme Logic
+    window.electronAPI.onThemeChanged((theme) => {
+        document.documentElement.setAttribute('data-theme', theme);
+    });
+    
+    // Initial Load
+    (async () => {
+        const prefs = await window.electronAPI?.getPreferences();
+        if (prefs && prefs.boardTheme) {
+            document.documentElement.setAttribute('data-theme', prefs.boardTheme);
+        }
+    })();
+  </script>
+</body>
+</html>

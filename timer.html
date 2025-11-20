@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Game Clock</title>
+  <meta http-equiv="Content-Security-Policy"
+        content="
+          default-src 'self';
+          script-src 'self' 'unsafe-inline';
+          style-src 'self' 'unsafe-inline';
+          img-src 'self' data:;
+          font-src 'self' data:;
+          object-src 'none';
+        ">
+
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at top, #252738, #11121a);
+      color: #f5f5f5;
+      padding: 8px;
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    #topBar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    #title {
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      opacity: 0.85;
+    }
+
+    #settingsIcon {
+      cursor: pointer;
+      font-size: 16px;
+      padding: 4px;
+      border-radius: 50%;
+      line-height: 1;
+      background: rgba(0,0,0,0.3);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.6);
+    }
+
+    #settingsIcon:hover {
+      background: rgba(0,0,0,0.5);
+    }
+
+    #clockShell {
+      display: flex;
+      gap: 6px;
+    }
+
+    .clock-side {
+      flex: 1;
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 12px;
+      padding: 6px 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .side-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      opacity: 0.85;
+    }
+
+    .side-name {
+      font-weight: 600;
+    }
+
+    .side-type {
+      font-size: 11px;
+      opacity: 0.7;
+    }
+
+    .time {
+      font-size: 26px;
+      font-weight: 600;
+      text-align: center;
+      margin-top: 4px;
+      letter-spacing: 0.06em;
+    }
+
+    .active {
+      box-shadow: 0 0 0 2px rgba(62,126,228,0.9);
+      animation: tickGlow 0.6s ease-out infinite alternate;
+    }
+
+    @keyframes tickGlow {
+      0% { box-shadow: 0 0 0 2px rgba(62,126,228,0.5); }
+      100% { box-shadow: 0 0 10px 3px rgba(62,126,228,0.9); }
+    }
+
+    .low-time {
+      color: #f44336;
+      animation: lowPulse 0.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes lowPulse {
+      0% { transform: scale(1); }
+      100% { transform: scale(1.05); }
+    }
+
+    /* --- CONFIG OVERLAY --- */
+
+    #configOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+    }
+
+    #configCard {
+      background: #181a22;
+      border-radius: 10px;
+      padding: 10px 12px;
+      width: 95%;
+      max-width: 260px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.8);
+      font-size: 12px;
+    }
+
+    #configCard h2 {
+      margin: 0 0 6px 0;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      opacity: 0.9;
+    }
+
+    label {
+      display: block;
+      margin-top: 4px;
+    }
+
+    input[type="number"] {
+      width: 80px;
+      background: #101218;
+      color: #eee;
+      border-radius: 6px;
+      border: 1px solid #333b4a;
+      padding: 2px 4px;
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    #configButtons {
+      margin-top: 8px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+
+    button {
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    #btnApply {
+      background: #3e7ee4;
+      color: #fff;
+    }
+
+    #btnCancel {
+      background: #444a55;
+      color: #eee;
+    }
+
+    #hint {
+      font-size: 10px;
+      opacity: 0.6;
+      margin-top: 2px;
+    }
+
+    /* PAUSE BUTTON CONTAINER */
+    .pause-container {
+      margin-top: 12px;
+      display: flex;
+      justify-content: center;
+    }
+    #btnPause {
+      width: 100%;
+      padding: 8px 0;
+      background: #ff9800;
+      color: white;
+      font-size: 14px;
+      font-weight: bold;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    #btnPause:hover {
+      filter: brightness(1.1);
+    }
+  </style>
+</head>
+<body>
+  <div id="topBar">
+    <div id="title">GAME CLOCK</div>
+    <div id="settingsIcon" title="Time control settings">⚙</div>
+  </div>
+
+  <div id="clockShell">
+    <div class="clock-side" id="whiteSide">
+      <div class="side-label">
+        <span class="side-name">White</span>
+        <span class="side-type" id="whiteType">Human</span>
+      </div>
+      <div class="time" id="whiteTime">05:00</div>
+    </div>
+
+    <div class="clock-side" id="blackSide">
+      <div class="side-label">
+        <span class="side-name">Black</span>
+        <span class="side-type" id="blackType">Human</span>
+      </div>
+      <div class="time" id="blackTime">05:00</div>
+    </div>
+  </div>
+  
+  <div class="pause-container">
+    <button id="btnPause">Pause</button>
+  </div>
+
+  <!-- CONFIG OVERLAY -->
+  <div id="configOverlay">
+    <div id="configCard">
+      <h2>Time Control</h2>
+      <label>
+        Base time (minutes):
+        <input type="number" id="baseMinutes" value="5" min="1" max="180">
+      </label>
+      <label>
+        Increment (seconds per move):
+        <input type="number" id="incrementSeconds" value="0" min="0" max="60">
+      </label>
+      <div id="hint">
+        Timer starts only after the first move is played.
+      </div>
+      <div id="configButtons">
+        <button id="btnCancel">Cancel</button>
+        <button id="btnApply">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const whiteSide = document.getElementById("whiteSide");
+    const blackSide = document.getElementById("blackSide");
+    const whiteTypeSpan = document.getElementById("whiteType");
+    const blackTypeSpan = document.getElementById("blackType");
+    const whiteTimeSpan = document.getElementById("whiteTime");
+    const blackTimeSpan = document.getElementById("blackTime");
+
+    const settingsIcon = document.getElementById("settingsIcon");
+    const configOverlay = document.getElementById("configOverlay");
+    const baseMinutesInput = document.getElementById("baseMinutes");
+    const incrementSecondsInput = document.getElementById("incrementSeconds");
+    const btnApply = document.getElementById("btnApply");
+    const btnCancel = document.getElementById("btnCancel");
+    const btnPause = document.getElementById("btnPause");
+
+    // --- CONFIG STATE ---
+    let baseMs = 5 * 60 * 1000;       // default 5 minutes
+    let incrementMs = 0 * 1000;       // default 0 increment
+
+    // --- CLOCK STATE ---
+    let whiteMs = baseMs;
+    let blackMs = baseMs;
+    let activeColor = null;           // "w" or "b"
+    let timerId = null;
+    let gameRunning = false;
+    let timeOver = false;
+    let isPaused = false;
+
+    // logic for "start after first move"
+    let initialSide = null;           // who had the move at start ("w" usually)
+    let firstMoveStarted = false;     // becomes true after first move played
+
+    function formatTime(ms) {
+      const totalSec = Math.max(0, Math.floor(ms / 1000));
+      const m = Math.floor(totalSec / 60);
+      const s = totalSec % 60;
+      return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+    }
+
+    function updateDisplay() {
+      whiteTimeSpan.textContent = formatTime(whiteMs);
+      blackTimeSpan.textContent = formatTime(blackMs);
+
+      whiteTimeSpan.classList.toggle("low-time", whiteMs <= 15000);
+      blackTimeSpan.classList.toggle("low-time", blackMs <= 15000);
+    }
+
+    function clearActive() {
+      whiteSide.classList.remove("active");
+      blackSide.classList.remove("active");
+    }
+
+    function setActive(color) {
+      clearActive();
+      if (color === "w") whiteSide.classList.add("active");
+      if (color === "b") blackSide.classList.add("active");
+    }
+
+    function stopTimer() {
+      if (timerId) {
+        clearInterval(timerId);
+        timerId = null;
+      }
+      gameRunning = false;
+      clearActive();
+    }
+
+    function startTicking() {
+      if (!activeColor || timeOver || isPaused) return;
+      if (timerId) clearInterval(timerId);
+
+      gameRunning = true;
+      setActive(activeColor);
+
+      timerId = setInterval(() => {
+        if (!gameRunning || timeOver || isPaused) return;
+
+        if (activeColor === "w") {
+          whiteMs -= 1000;
+          if (whiteMs <= 0) {
+            whiteMs = 0;
+            updateDisplay();
+            handleFlag("w");
+            return;
+          }
+        } else if (activeColor === "b") {
+          blackMs -= 1000;
+          if (blackMs <= 0) {
+            blackMs = 0;
+            updateDisplay();
+            handleFlag("b");
+            return;
+          }
+        }
+        updateDisplay();
+      }, 1000);
+    }
+
+    function handleFlag(loserColor) {
+      timeOver = true;
+      stopTimer();
+      const loserName = loserColor === "w" ? "White" : "Black";
+      const winnerName = loserColor === "w" ? "Black" : "White";
+      alert(`${loserName} lost on time.\n${winnerName} wins the game.`);
+      // tell main/renderer to stop the match
+      window.electronAPI?.stopMatch();
+    }
+    
+    btnPause.addEventListener("click", () => {
+      if (timeOver) return;
+      // Only allow pause if game effectively started or waiting for first move
+      // Typically pausing before first move is just 'do nothing' but visual feedback is good.
+      
+      isPaused = !isPaused;
+      if (isPaused) {
+        if (timerId) clearInterval(timerId);
+        btnPause.textContent = "Resume";
+        btnPause.style.background = "#4caf50"; // Green for resume
+        document.body.style.opacity = "0.8";
+      } else {
+        btnPause.textContent = "Pause";
+        btnPause.style.background = "#ff9800"; // Orange for pause
+        document.body.style.opacity = "1";
+        if (gameRunning) {
+          startTicking();
+        }
+      }
+    });
+
+    // --- IPC: game start info from main.js ---
+    if (window.electronAPI?.onTimerGameStart) {
+      window.electronAPI.onTimerGameStart((info) => {
+        // info: { mode, white:{type,color}, black:{type,color} }
+        whiteTypeSpan.textContent = info?.white?.type || "Human";
+        blackTypeSpan.textContent = info?.black?.type || "Human";
+
+        // reset clocks using current config
+        whiteMs = baseMs;
+        blackMs = baseMs;
+        activeColor = null;
+        initialSide = null;
+        firstMoveStarted = false;
+        timeOver = false;
+        
+        isPaused = false;
+        btnPause.textContent = "Pause";
+        btnPause.style.background = "#ff9800";
+        document.body.style.opacity = "1";
+        
+        stopTimer();
+        updateDisplay();
+      });
+    }
+
+    // --- IPC: turn changed from renderer ---
+    if (window.electronAPI?.onTurnChanged) {
+      window.electronAPI.onTurnChanged((color) => {
+        if (timeOver) return;
+        if (!color) return;
+
+        // First time we see a turn, that's the starting side (e.g. White).
+        if (initialSide === null) {
+          initialSide = color;
+          activeColor = null;   // do not start yet
+          clearActive();
+          // Timer will start only when turn changes away from this side.
+          return;
+        }
+
+        // From now on, each turn change means a move was played
+        // by the opposite color (justPlayed).
+        const justPlayed = (color === "w") ? "b" : "w";
+
+        // Give increment to the side that just moved
+        if (justPlayed === "w") whiteMs += incrementMs;
+        if (justPlayed === "b") blackMs += incrementMs;
+
+        // On the very first move, this is when the clock actually starts.
+        if (!firstMoveStarted) {
+          firstMoveStarted = true;
+        }
+
+        // Now it's "color" to move; that side's clock should tick.
+        activeColor = color;
+        startTicking();
+      });
+    }
+
+    // --- IPC: match stopped manually (Stop Match button) ---
+    if (window.electronAPI?.onTimerStop) {
+      window.electronAPI.onTimerStop(() => {
+        timeOver = true;
+        stopTimer();
+      });
+    }
+
+    // --- SETTINGS OVERLAY LOGIC ---
+
+    settingsIcon.addEventListener("click", () => {
+      // preload current settings into inputs
+      baseMinutesInput.value = Math.round(baseMs / 60000);
+      incrementSecondsInput.value = Math.round(incrementMs / 1000);
+      configOverlay.style.display = "flex";
+    });
+
+    btnCancel.addEventListener("click", () => {
+      configOverlay.style.display = "none";
+    });
+
+    btnApply.addEventListener("click", () => {
+      const m = parseInt(baseMinutesInput.value, 10) || 5;
+      const inc = parseInt(incrementSecondsInput.value, 10) || 0;
+      baseMs = Math.max(1, m) * 60 * 1000;
+      incrementMs = Math.max(0, inc) * 1000;
+
+      // Reset clocks immediately with new settings.
+      whiteMs = baseMs;
+      blackMs = baseMs;
+      activeColor = null;
+      initialSide = null;
+      firstMoveStarted = false;
+      timeOver = false;
+      
+      isPaused = false;
+      btnPause.textContent = "Pause";
+      btnPause.style.background = "#ff9800";
+      document.body.style.opacity = "1";
+      
+      stopTimer();
+      updateDisplay();
+
+      configOverlay.style.display = "none";
+    });
+
+    // initial draw
+    updateDisplay();
+  </script>
+</body>
+</html>

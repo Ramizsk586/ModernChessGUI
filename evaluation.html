@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Evaluation</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #101115;
+      color: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      box-sizing: border-box;
+      padding: 8px;
+    }
+
+    #title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      opacity: 0.8;
+      margin-bottom: 6px;
+    }
+
+    .bar-shell {
+      width: 40px;
+      flex: 1;
+      max-height: 90%;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #333a4a;
+      background: #20222c;
+      display: flex;
+      flex-direction: column-reverse;
+      box-shadow: 0 0 8px rgba(0,0,0,0.7);
+    }
+
+    .seg-white {
+      background: linear-gradient(to top, #f5f5f5, #dcdcdc);
+      transition: height 0.25s ease-out;
+    }
+
+    .seg-black {
+      background: linear-gradient(to bottom, #13151b, #000);
+      transition: height 0.25s ease-out;
+    }
+
+    #scoreLabel {
+      margin-top: 6px;
+      font-size: 12px;
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <div id="title">EVALUATION</div>
+  <div class="bar-shell">
+    <div class="seg-white" id="whiteSeg" style="height:50%;"></div>
+    <div class="seg-black" id="blackSeg" style="height:50%;"></div>
+  </div>
+  <div id="scoreLabel">0.00</div>
+
+  <script>
+    const whiteSeg = document.getElementById("whiteSeg");
+    const blackSeg = document.getElementById("blackSeg");
+    const scoreLabel = document.getElementById("scoreLabel");
+
+    function updateEvalBar(score) {
+      // clamp score to [-5, +5] pawns for display
+      const clamped = Math.max(-5, Math.min(5, score || 0));
+      // convert to percentage: 0% = winning for black, 100% = winning for white
+      const whitePct = 50 + (clamped * 10); // 5 pawns = 100%, -5 = 0%
+      const w = Math.max(0, Math.min(100, whitePct));
+      const b = 100 - w;
+
+      whiteSeg.style.height = w + "%";
+      blackSeg.style.height = b + "%";
+
+      const text = (clamped >= 0 ? "+" : "") + clamped.toFixed(2);
+      scoreLabel.textContent = text;
+    }
+
+    // listen to eval-score from main process
+    if (window.electronAPI?.onEvalScore) {
+      window.electronAPI.onEvalScore((score) => {
+        updateEvalBar(score);
+      });
+    }
+
+    // start neutral
+    updateEvalBar(0);
+  </script>
+</body>
+</html>

@@ -1,0 +1,483 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; object-src 'none';">
+  <title>Deep Threat Analysis</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    #threat-board {
+      width: 400px;
+      height: 400px;
+    }
+    #db-status {
+        position: absolute; 
+        top: 10px; 
+        right: 20px; 
+        font-size: 11px; 
+        color: #4caf50; 
+        background: rgba(76,175,80,0.15); 
+        padding: 4px 8px; 
+        border-radius: 4px;
+        display: none;
+    }
+    .threat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      background: linear-gradient(90deg, rgba(255,255,255,0.03) 0%, transparent 100%);
+      border-left: 3px solid transparent;
+    }
+    .threat-item.active {
+      background: linear-gradient(90deg, rgba(244,67,54,0.1) 0%, transparent 100%);
+      border-left: 3px solid #f44336;
+    }
+    .threat-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .threat-details {
+      font-size: 11px;
+      opacity: 0.7;
+      font-family: monospace;
+    }
+    .step-controls {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 10px;
+      padding: 10px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 8px;
+      width: 90%;
+    }
+    .step-btn {
+      background: #263238;
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 4px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .step-btn:hover { background: #37474f; }
+    .step-btn:disabled { opacity: 0.3; cursor: default; }
+    #scan-progress {
+      width: 100%;
+      height: 4px;
+      background: #222;
+      position: absolute;
+      top: 0;
+      left: 0;
+      overflow: hidden;
+      display: none;
+    }
+    #scan-bar {
+      width: 0%;
+      height: 100%;
+      background: #2196f3;
+      transition: width 0.3s;
+    }
+    .empty-state {
+        padding: 20px;
+        text-align: center;
+        color: #666;
+        font-style: italic;
+    }
+    #threat-desc {
+      color: #ff5252;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="scan-progress"><div id="scan-bar"></div></div>
+  <div id="db-status">Database Connected</div>
+  
+  <div class="threat-layout">
+    <!-- LEFT PANE: BOARD + CONTROLS -->
+    <div class="threat-left-pane">
+      <div id="board-container" style="margin: 0; width: 420px; height: 420px;">
+        <div id="board"></div>
+        <svg class="arrow-layer" id="arrow-layer"></svg>
+      </div>
+
+      <div class="step-controls" id="threat-stepper" style="display:none;">
+        <div style="width:100%; text-align:center; margin-bottom:8px; color:#ccc; font-size:12px;">THREAT SEQUENCE STEPPER</div>
+        <button class="step-btn" id="stepStart">|&lt;</button>
+        <button class="step-btn" id="stepBack">&lt;</button>
+        <span id="step-counter" style="font-size:12px; padding:4px 8px;">0 / 0</span>
+        <button class="step-btn" id="stepFwd">&gt;</button>
+        <button class="step-btn" id="stepEnd">&gt;|</button>
+      </div>
+
+      <div id="hint-text" style="margin-top:15px; color:#aaa; font-size:14px; text-align:center;"></div>
+      <div id="threat-desc" style="text-align:center;"></div>
+    </div>
+
+    <!-- RIGHT PANE: THREAT LIST -->
+    <div class="threat-right-pane">
+      <div class="threat-menu-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="margin:0; font-size:15px;">Detected Threats</h3>
+        <span id="threat-count" style="font-size:11px; background:#333; padding:2px 6px; border-radius:10px;">0</span>
+      </div>
+      <div class="threat-menu-list" id="threat-list">
+        <div class="empty-state">Waiting for game data...</div>
+      </div>
+      <div style="padding:10px;">
+         <button id="rescanBtn" style="width:100%; padding:8px; background:#2196f3; border:none; color:white; border-radius:6px; cursor:pointer;">Restart Scan</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- State ---
+    let gameData = null;
+    let threats = []; 
+    let currentThreatIndex = -1;
+    
+    let currentThreatPv = [];
+    let currentPvIndex = 0;
+    let baseBoardState = null;
+    
+    // --- DOM Elements ---
+    const boardEl = document.getElementById("board");
+    const arrowLayer = document.getElementById("arrow-layer");
+    const threatListEl = document.getElementById("threat-list");
+    const hintText = document.getElementById("hint-text");
+    const threatDesc = document.getElementById("threat-desc");
+    const scanProgress = document.getElementById("scan-progress");
+    const scanBar = document.getElementById("scan-bar");
+    const threatCount = document.getElementById("threat-count");
+    const stepperDiv = document.getElementById("threat-stepper");
+    
+    const stepBack = document.getElementById("stepBack");
+    const stepFwd = document.getElementById("stepFwd");
+    const stepCounter = document.getElementById("step-counter");
+
+    // --- Board Logic ---
+    const initialBoard = [
+      ["bR","bN","bB","bQ","bK","bB","bN","bR"],
+      ["bP","bP","bP","bP","bP","bP","bP","bP"],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["wP","wP","wP","wP","wP","wP","wP","wP"],
+      ["wR","wN","wB","wQ","wK","wB","wN","wR"]
+    ];
+
+    function cloneBoard(b) { return b.map(row => row.slice()); }
+    
+    function coord(sq) {
+      if (!sq || sq.length < 2) return {row:0, col:0};
+      const col = sq.charCodeAt(0) - 97;
+      const row = 8 - parseInt(sq[1]);
+      return {row, col};
+    }
+    
+    // Apply engine UCI moves (string based) - used for hypothetical threat lines
+    function applyUciMove(b, uci) {
+      if (!uci) return;
+      const fromSq = uci.substring(0, 2);
+      const toSq = uci.substring(2, 4);
+      const promo = uci.length > 4 ? uci[4] : null;
+      
+      const f = coord(fromSq);
+      const t = coord(toSq);
+      const p = b[f.row][f.col];
+      
+      b[f.row][f.col] = "";
+      
+      if (promo) {
+         const color = p ? p[0] : "w"; 
+         const type = promo.toUpperCase(); 
+         b[t.row][t.col] = color + type;
+      } else {
+         b[t.row][t.col] = p;
+      }
+      
+      // Quick castling visual fix (King move logic)
+      if (p && p[1] === 'K' && Math.abs(f.col - t.col) > 1) {
+          if (t.col === 6) { b[t.row][5] = b[t.row][7]; b[t.row][7] = ""; }
+          if (t.col === 2) { b[t.row][3] = b[t.row][0]; b[t.row][0] = ""; }
+      }
+      
+      return { from: fromSq, to: toSq }; 
+    }
+    
+    // Rebuild board from game history (robust object based)
+    function getBoardAtGameIndex(index) {
+      let b = cloneBoard(initialBoard);
+      if (!gameData || !gameData.moves) return b;
+      
+      const limit = (index === undefined || index === -1) ? -1 : index;
+      if (limit === -1) return b;
+
+      for (let i = 0; i <= limit; i++) {
+        const mv = gameData.moves[i];
+        if (!mv) break;
+        
+        const f = coord(mv.from);
+        const t = coord(mv.to);
+        const p = b[f.row][f.col];
+        
+        // Move piece
+        b[f.row][f.col] = "";
+        b[t.row][t.col] = mv.piece || p; // Use stored piece (handles promotion)
+
+        // Castling
+        if (p && p[1] === 'K' && Math.abs(f.col - t.col) > 1) {
+           if (t.col === 6) { b[t.row][5] = b[t.row][7]; b[t.row][7] = ""; }
+           else if (t.col === 2) { b[t.row][3] = b[t.row][0]; b[t.row][0] = ""; }
+        }
+      }
+      return b;
+    }
+
+    function renderBoard(b, lastMove) {
+      boardEl.innerHTML = "";
+      for(let r=0; r<8; r++){
+        for(let c=0; c<8; c++){
+          const div = document.createElement("div");
+          div.className = "square " + ((r+c)%2===0 ? "light" : "dark");
+          
+          if(lastMove) {
+            const f = coord(lastMove.from);
+            const t = coord(lastMove.to);
+            if((f.row===r && f.col===c) || (t.row===r && t.col===c)) {
+              div.classList.add("last-move-square");
+            }
+          }
+
+          const p = b[r][c];
+          if(p) {
+            const pDiv = document.createElement("div");
+            pDiv.className = "piece";
+            pDiv.style.backgroundImage = `url(assets/pieces/${p}.png)`;
+            div.appendChild(pDiv);
+          }
+          boardEl.appendChild(div);
+        }
+      }
+    }
+
+    function clearArrows() { arrowLayer.innerHTML = ""; }
+    
+    function drawArrow(uci, color="#f44336") {
+      if (!uci) return;
+      const fromSq = uci.substring(0,2);
+      const toSq = uci.substring(2,4);
+      
+      const f = coord(fromSq);
+      const t = coord(toSq);
+      
+      const x1 = (f.col * 12.5) + 6.25;
+      const y1 = (f.row * 12.5) + 6.25;
+      const x2 = (t.col * 12.5) + 6.25;
+      const y2 = (t.row * 12.5) + 6.25;
+
+      const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+      const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+      const id = `arrow-${Math.random()}`;
+      marker.setAttribute("id", id);
+      marker.setAttribute("markerWidth", "10");
+      marker.setAttribute("markerHeight", "7");
+      marker.setAttribute("refX", "9");
+      marker.setAttribute("refY", "3.5");
+      marker.setAttribute("orient", "auto");
+      
+      const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+      poly.setAttribute("points", "0 0, 10 3.5, 0 7");
+      poly.setAttribute("fill", color);
+      marker.appendChild(poly);
+      defs.appendChild(marker);
+      arrowLayer.appendChild(defs);
+
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", x1 + "%");
+      line.setAttribute("y1", y1 + "%");
+      line.setAttribute("x2", x2 + "%");
+      line.setAttribute("y2", y2 + "%");
+      line.setAttribute("stroke", color);
+      line.setAttribute("stroke-width", "3");
+      line.setAttribute("stroke-linecap", "round");
+      line.setAttribute("marker-end", `url(#${id})`);
+      line.style.opacity = "0.8";
+      arrowLayer.appendChild(line);
+    }
+
+    function selectThreat(idx) {
+      if (idx < 0 || idx >= threats.length) return;
+      currentThreatIndex = idx;
+      const threat = threats[idx];
+      
+      baseBoardState = getBoardAtGameIndex(threat.index);
+      currentThreatPv = threat.pv || [];
+      currentPvIndex = 0; 
+      
+      // Render initial threat state
+      let lastMv = gameData.moves[threat.index];
+      renderBoard(baseBoardState, lastMv);
+      clearArrows();
+      
+      // Draw first arrow of threat
+      if (currentThreatPv.length > 0) {
+          drawArrow(currentThreatPv[0], "#ff9800");
+      }
+      
+      document.querySelectorAll(".threat-item").forEach((el, i) => {
+          el.classList.toggle("active", i === idx);
+      });
+      
+      stepperDiv.style.display = "flex";
+      threatDesc.textContent = threat.type;
+      
+      const color = (threat.index % 2 === 0) ? "White" : "Black";
+      const moveNum = Math.floor(threat.index/2) + 1;
+      hintText.textContent = `After ${moveNum}. ${color} moved, engine found this sequence...`;
+      
+      updateStepperUI();
+    }
+    
+    function renderThreatState() {
+        let b = cloneBoard(baseBoardState);
+        let lastMv = null;
+        
+        // Apply sequence up to current step
+        for (let i=0; i < currentPvIndex; i++) {
+            const uci = currentThreatPv[i];
+            lastMv = applyUciMove(b, uci);
+        }
+        
+        renderBoard(b, lastMv);
+        clearArrows();
+        
+        if (currentPvIndex < currentThreatPv.length) {
+            drawArrow(currentThreatPv[currentPvIndex], "#ff9800");
+        }
+        updateStepperUI();
+    }
+    
+    function updateStepperUI() {
+        stepCounter.textContent = `${currentPvIndex} / ${currentThreatPv.length}`;
+        stepBack.disabled = currentPvIndex === 0;
+        stepFwd.disabled = currentPvIndex >= currentThreatPv.length;
+    }
+    
+    function startScan() {
+        if (!gameData || !gameData.moves) return;
+        threats = [];
+        threatListEl.innerHTML = `<div class="empty-state">Scanning ${gameData.moves.length} moves...</div>`;
+        threatCount.textContent = "0";
+        scanProgress.style.display = "block";
+        scanBar.style.width = "5%";
+        
+        window.electronAPI.startThreatScan(gameData.moves);
+    }
+
+    window.electronAPI.onThreatFound((threat) => {
+        if (threats.length === 0) {
+            threatListEl.innerHTML = ""; // Clear 'Scanning...' message on first find
+        }
+        threats.push(threat);
+        threatCount.textContent = threats.length;
+        
+        const pct = Math.min(90, (threat.index / gameData.moves.length) * 100);
+        scanBar.style.width = pct + "%";
+        
+        const div = document.createElement("div");
+        div.className = "threat-item";
+        const moveNum = Math.floor(threat.index/2) + 1;
+        const color = threat.index%2===0 ? "White" : "Black";
+        
+        div.innerHTML = `
+            <div class="threat-header">
+                <span>${moveNum}. ${color}</span>
+                <span style="color:#f44336;">${threat.type.split(" ")[0]}</span>
+            </div>
+            <div class="threat-details">
+               Sequence: ${threat.pv.slice(0,3).join(" ")}...
+            </div>
+        `;
+        div.onclick = () => selectThreat(threats.length - 1);
+        threatListEl.appendChild(div);
+        
+        if (threats.length === 1) selectThreat(0);
+    });
+    
+    window.electronAPI.onScanComplete(() => {
+        scanBar.style.width = "100%";
+        setTimeout(() => {
+            scanProgress.style.display = "none";
+        }, 500);
+        if (threats.length === 0) {
+            threatListEl.innerHTML = "<div class='empty-state'>No major threats detected. Good game!</div>";
+        }
+    });
+
+    document.getElementById("rescanBtn").addEventListener("click", startScan);
+    
+    stepBack.onclick = () => {
+        if (currentPvIndex > 0) {
+            currentPvIndex--;
+            renderThreatState();
+        }
+    };
+    stepFwd.onclick = () => {
+        if (currentPvIndex < currentThreatPv.length) {
+            currentPvIndex++;
+            renderThreatState();
+        }
+    };
+    document.getElementById("stepStart").onclick = () => {
+        currentPvIndex = 0;
+        renderThreatState();
+    };
+    document.getElementById("stepEnd").onclick = () => {
+        currentPvIndex = currentThreatPv.length;
+        renderThreatState();
+    };
+
+    // Theme Logic
+    window.electronAPI.onThemeChanged((theme) => {
+        document.documentElement.setAttribute('data-theme', theme);
+    });
+
+    window.addEventListener("DOMContentLoaded", async () => {
+        // Initialize board immediately (even empty)
+        renderBoard(cloneBoard(initialBoard), null);
+
+        // Initialize Theme
+        const prefs = await window.electronAPI?.getPreferences();
+        if (prefs && prefs.boardTheme) {
+            document.documentElement.setAttribute('data-theme', prefs.boardTheme);
+        }
+
+        const config = await window.electronAPI?.databaseGet();
+        if (config && config.path) {
+            document.getElementById("db-status").style.display = "block";
+        }
+        
+        if (window.electronAPI?.onLastGame) {
+            window.electronAPI.onLastGame((data) => {
+                gameData = data;
+                if (gameData && gameData.moves && gameData.moves.length > 0) {
+                    startScan();
+                } else {
+                    threatListEl.innerHTML = "<div class='empty-state'>No game data found. Play a game first!</div>";
+                }
+            });
+            window.electronAPI.requestLastGame();
+        }
+    });
+  </script>
+</body>
+</html>
