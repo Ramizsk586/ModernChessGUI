@@ -28,7 +28,7 @@ npm install
 npm start
 ```
 
-* Build Windows `.exe`:
+* Build Windows `.exe` (optional):
 
 ```bash
 npm run build
@@ -36,9 +36,35 @@ npm run build
 
 ---
 
+## 🛠 Future Upgrades (Community Support Goal)
+
+If Chessly gets **decent downloads & user support**,
+**Version 1.2.0.0** will launch with:
+
+• Full **AI Battle Arena** — API-based AI vs AI matches
+• **Real-time analysis** with engine chat
+• **Threat detection intelligence** upgrades
+• **Better performance** & smoother animations
+• Optional **voice-based review**
+• Polished **match reports** & PGN export
+• More **board themes** and UI refinements
+
+<img width="1408" height="1005" alt="Screenshot 2025-11-20 160341" src="https://github.com/user-attachments/assets/c61145bc-bacf-4a50-afcc-bcb49d6245cd" />
+
+<img width="895" height="885" alt="Screenshot 2025-11-20 160409" src="https://github.com/user-attachments/assets/0ba8764e-03b0-4b6d-9a04-4b5bc10a14c5" />
+
+<img width="866" height="998" alt="Screenshot 2025-11-20 160251" src="https://github.com/user-attachments/assets/5e90f302-dd01-4085-9166-011d323dd124" />
+
+<img width="1923" height="1083" alt="Screenshot 2025-11-20 160322" src="https://github.com/user-attachments/assets/0463f5c0-4e01-4316-9e2a-b907f0a3f88f" />
+
+Your support helps Chessly grow into a **true professional chess training tool**.
+
+---
+
 ## 👤 Credits
 
 Created by **Sk Abdul Ramiz** (@Ramizsk586)
+Solo developer — constantly improving Chessly
 
 ---
 
@@ -47,4 +73,4 @@ Created by **Sk Abdul Ramiz** (@Ramizsk586)
 This project is released under the **MIT License**.
 Feel free to use, modify, and share!
 
----
+```
