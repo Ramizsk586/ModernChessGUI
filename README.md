@@ -45,7 +45,6 @@ If Chessly gets **decent downloads & user support**,
 • **Real-time analysis** with engine chat
 • **Threat detection intelligence** upgrades
 • **Better performance** & smoother animations
-• Optional **voice-based review**
 • Polished **match reports** & PGN export
 • More **board themes** and UI refinements
 
